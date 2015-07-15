@@ -1,0 +1,141 @@
+using unoidl.com.sun.star.lang;
+using unoidl.com.sun.star.uno;
+using unoidl.com.sun.star.bridge;
+using unoidl.com.sun.star.frame;
+using unoidl.com.sun.star.beans;
+
+public static void ConvertToPDF(string inputFile, string outputFile)
+        {
+            if (ConvertExtensionToFilterType(Path.GetExtension(inputFile)) == null)
+                throw new InvalidProgramException("Unknown file type for OpenOffice. File = " + inputFile);
+
+            StartOpenOffice();
+
+            //Get a ComponentContext
+            unoidl.com.sun.star.uno.XComponentContext xLocalContext =
+               uno.util.Bootstrap.bootstrap();
+            //Get MultiServiceFactory
+            unoidl.com.sun.star.lang.XMultiServiceFactory xRemoteFactory =
+               (unoidl.com.sun.star.lang.XMultiServiceFactory)
+               xLocalContext.getServiceManager();
+            //Get a CompontLoader
+            XComponentLoader aLoader =
+               (XComponentLoader)xRemoteFactory.createInstance("com.sun.star.frame.Desktop");
+            //Load the sourcefile
+
+            XComponent xComponent = null;
+            try
+            {
+                xComponent = initDocument(aLoader,
+                   PathConverter(inputFile), "_blank");
+                //Wait for loading
+                while (xComponent == null)
+                {
+                    System.Threading.Thread.Sleep(1000);
+                }
+
+                // save/export the document
+                saveDocument(xComponent, inputFile, PathConverter(outputFile));
+
+            }
+            catch { throw; }
+            finally { xComponent.dispose(); }
+
+        }
+
+        private static void StartOpenOffice()
+        {
+            Process[] ps = Process.GetProcessesByName("soffice.exe");
+            if (ps != null)
+            {
+                if (ps.Length > 0)
+                    return;
+                else
+                {
+                    Process p = new Process();
+                    p.StartInfo.Arguments = "-headless -nofirststartwizard";
+                    p.StartInfo.FileName = "soffice.exe";
+                    p.StartInfo.CreateNoWindow = true;
+                    bool result = p.Start();
+                    if (result == false)
+                        throw new InvalidProgramException("OpenOffice failed to start.");
+                }
+            }
+            else
+            {
+                throw new InvalidProgramException("OpenOffice not found.  Is OpenOffice installed?");
+            }
+        }
+
+        private static XComponent initDocument(XComponentLoader aLoader, string file, string target)
+        {
+            PropertyValue[] openProps = new PropertyValue[1];
+            openProps[0] = new PropertyValue();
+            openProps[0].Name = "Hidden";
+            openProps[0].Value = new uno.Any(true);
+
+
+            XComponent xComponent = aLoader.loadComponentFromURL(
+               file, target, 0,
+               openProps);
+
+            return xComponent;
+        }
+
+
+        private static void saveDocument(XComponent xComponent, string sourceFile, string destinationFile)
+        {
+            PropertyValue[] propertyValues = new PropertyValue[2];
+            propertyValues = new PropertyValue[2];
+            // Setting the flag for overwriting 
+            propertyValues[1] = new PropertyValue();
+            propertyValues[1].Name = "Overwrite";
+            propertyValues[1].Value = new uno.Any(true);
+            //// Setting the filter name 
+            propertyValues[0] = new PropertyValue();
+            propertyValues[0].Name = "FilterName";
+            propertyValues[0].Value = new uno.Any(ConvertExtensionToFilterType(Path.GetExtension(sourceFile)));
+            ((XStorable)xComponent).storeToURL(destinationFile, propertyValues);
+
+        }
+
+
+        private static string PathConverter(string file)
+        {
+            if (file == null || file.Length == 0)
+                throw new NullReferenceException("Null or empty path passed to OpenOffice");
+
+            return String.Format("file:///{0}", file.Replace(@"\", "/"));
+
+        }
+
+        public static string ConvertExtensionToFilterType(string extension)
+        {
+            switch (extension)
+            {
+                case ".doc":
+                case ".docx":
+                case ".txt":
+                case ".rtf":
+                case ".html":
+                case ".htm":
+                case ".xml":
+                case ".odt":
+                case ".wps":
+                case ".wpd":
+                    return "writer_pdf_Export";
+                case ".xls":
+                case ".xlsb":
+                case ".ods":
+                    return "calc_pdf_Export";
+                case ".ppt":
+                case ".pptx":
+                case ".odp":
+                    return "impress_pdf_Export";
+
+                default: return null;
+            }
+        }
+
+
+    }
